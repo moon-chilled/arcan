@@ -444,8 +444,7 @@ struct arcan_frameserver* platform_launch_fork(
 /* most kinds will need this, not the encode though */
 	arcan_errc errc;
 	if (add_audio)
-		ctx->aid = arcan_audio_feed(
-			(arcan_afunc_cb) arcan_frameserver_audioframe_direct, ctx, &errc);
+		ctx->aid = arcan_audio_feed(arcan_frameserver_audioframe_direct, ctx, &errc);
 
 /* "fake" a register since that step has already happened */
 	if (ctx->segid != SEGID_UNKNOWN){

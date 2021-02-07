@@ -9188,8 +9188,7 @@ static arcan_frameserver* spawn_subsegment(
  * frameserver-bound recordtarget if mixing weights need to change */
 	arcan_errc errc;
 	if (segid != SEGID_ENCODER)
-		res->aid = arcan_audio_feed((arcan_afunc_cb)
-			arcan_frameserver_audioframe_direct, res, &errc);
+		res->aid = arcan_audio_feed(arcan_frameserver_audioframe_direct, res, &errc);
 
 	arcan_conductor_register_frameserver(res);
 

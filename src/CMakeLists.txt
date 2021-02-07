@@ -133,6 +133,9 @@ else()
 		endif()
 		include(GNUInstallDirs)
 	endif()
+	if (NOT AUDIO_PLATFORM)
+		set(AUDIO_PLATFORM "gorilla")
+	endif()
 	set(AGPPLATFORM_STR "gl21, gles2, gles3, stub")
 
 	# we can remove some of this cruft when 'buntu LTS gets ~3.0ish
@@ -155,6 +158,7 @@ else()
 	amsg("${CL_YEL}\t-DBUILD_PRESET=${CL_GRN}everything client${CL_RST}")
 	amsg("")
 	amsg("${CL_WHT}Audio/Video/Input Support:")
+	amsg("${CL_YEL}\t-DAUDIO_PLATFORM=${CL_GRN}[gorilla|al]${CL_RST}")
 	amsg("${CL_YEL}\t-DVIDEO_PLATFORM=${CL_GRN}${VPLATFORM_STR}${CL_RST}")
 	amsg("${CL_YEL}\t-DAGP_PLATFORM=${CL_GRN}${AGPPLATFORM_STR}${CL_RST}")
 	amsg("")
@@ -194,9 +198,6 @@ else()
 	amsg("${CL_YEL}\t-D(DISABLE_FSRV_ (encode, decode, net, remoting, terminal, game)${CL_GRN}=ON${CL_RST}")
 	amsg("${CL_YEL}\t-D(APPL_DEST, RES_DEST, APIMAN_DEST, MAN_DEST, SCRIPTS_DEST)=${CL_GRN}/some/path${CL_RST}")
 	amsg("")
-
-	# no other audio platforms supported currently
-	set(AUDIO_PLATFORM "openal")
 endif()
 
 if (BUILD_PRESET STREQUAL "everything" AND NOT (CLIENT_LIBRARY_BUILD OR BUILD_PRESET STREQUAL "client" OR ${CMAKE_SYSTEM_NAME} MATCHES "Darwin"))
@@ -357,34 +358,79 @@ else()
 		set(FREETYPE_DEFAULT_INCLUDE_DIRS ${FREETYPE_INCLUDE_DIRS})
 	endif()
 
+	set(EXTMAKE_CMD make)
+
+	# for the statically- linked external dependencies, we need to hint where
+	# we need the gmake rather than make system
+	if (${CMAKE_SYSTEM_NAME} MATCHES "BSD|DragonFly")
+		set(BSD_BUILD TRUE)
+		set(EXTMAKE_CMD gmake)
+	endif()
+
 	# need the separation here to not confuse openAL here with
 	# the version that we patch into LWA
-	if (EXISTS ${EXTERNAL_SRC_DIR}/git/openal AND STATIC_OPENAL)
-		amsg("${CL_YEL}Building OpenAL static from external/git mirror${CL_RST}")
-		ExternalProject_Add(OpenAL
-			SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal
-			BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal_static
+	if (AUDIO_PLATFORM STREQUAL "al" OR NOT EXISTS ${EXTERNAL_SRC_DIR}/git/gorilla-audio)
+		if (EXISTS ${EXTERNAL_SRC_DIR}/git/openal AND STATIC_OPENAL)
+			amsg("${CL_YEL}Building OpenAL static from external/git mirror${CL_RST}")
+			ExternalProject_Add(OpenAL
+				SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal
+				BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal_static
+				UPDATE_COMMAND ""
+				GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/openal"
+				${EXTERNAL_DEFS}
+				${CMAKE_EXTERNAL_DEFS}
+				-DALSOFT_BACKEND_DSOUND=OFF
+				-DALSOFT_BACKEND_MMDEVAPI=OFF
+				-DALSOFT_BACKEND_OPENSL=OFF
+				-DALSOFT_BACKEND_PORTAUDIO=OFF
+				-DALSOFT_BACKEND_SOLARIS=OFF
+				-DALSOFT_BACKEND_SNDIO=OFF
+				-DALSOFT_BACKEND_QSA=OFF
+				-DALSOFT_BACKEND_WAVE=OFF
+				-DALSOFT_BACKEND_WINMM=OFF
+			)
+			set(AUDIO_LIBRARY
+				"${CMAKE_CURRENT_BINARY_DIR}/openal_static/libopenal.a"
+			)
+			list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/include/AL")
+			list(APPEND MAIN_DEPS OpenAL)
+		else()
+			find_package(OpenAL REQUIRED QUIET)
+			set(AUDIO_LIBRARY "${OPENAL_LIBRARY}")
+		endif()
+		list(APPEND SOURCES engine/arcan_audio_openal.c)
+		add_definitions(-DOPENAL)
+	else() #gorilla
+		amsg("${CL_YEL}Building gorilla audio from external/git mirror${CL_RST}")
+
+		if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+			set(GORILLA_BUILDTYPE debug)
+		else()
+			set(GORILLA_BUILDTYPE release)
+		endif()
+
+		ExternalProject_Add(Gorilla
+			SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/ga
+			GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/gorilla-audio"
+			CONFIGURE_COMMAND ""
 			UPDATE_COMMAND ""
-			GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/openal"
-			${EXTERNAL_DEFS}
-			${CMAKE_EXTERNAL_DEFS}
-			-DALSOFT_BACKEND_DSOUND=OFF
-			-DALSOFT_BACKEND_MMDEVAPI=OFF
-			-DALSOFT_BACKEND_OPENSL=OFF
-			-DALSOFT_BACKEND_PORTAUDIO=OFF
-			-DALSOFT_BACKEND_SOLARIS=OFF
-			-DALSOFT_BACKEND_SNDIO=OFF
-			-DALSOFT_BACKEND_QSA=OFF
-			-DALSOFT_BACKEND_WAVE=OFF
-			-DALSOFT_BACKEND_WINMM=OFF
-		)
-		set(OPENAL_LIBRARY
-			"${CMAKE_CURRENT_BINARY_DIR}/openal_static/libopenal.a"
-		)
-		set(OPENAL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include/AL")
-		list(APPEND MAIN_DEPS OpenAL)
-	else()
-		find_package(OpenAL REQUIRED QUIET)
+			INSTALL_COMMAND ""
+			BUILD_IN_SOURCE 1
+			BUILD_COMMAND "${EXTMAKE_CMD}"
+			MODE=${GORILLA_BUILDTYPE}
+			CC=${CMAKE_C_COMPILER}
+			-C
+			${CMAKE_CURRENT_BINARY_DIR}/ga
+			BUILD_DYNAMIC=0
+			${EXTERNAL_DEFS})
+		set(AUDIO_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/ga/o/${GORILLA_BUILDTYPE}/libgorilla.a")
+		if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+			list(APPEND AUDIO_LIBRARY "asound")
+		endif()
+		list(APPEND MAIN_DEPS Gorilla)
+		list(APPEND SOURCES engine/arcan_audio_gorilla.c)
+		list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/ga/include")
+		add_definitions(-DGORILLA)
 	endif()
 
 	#
@@ -404,14 +450,6 @@ else()
 
 	include(${PLATFORM_ROOT}/cmake/CMakeLists.AGP)
 	include(${PLATFORM_ROOT}/cmake/CMakeLists.Video)
-	set(EXTMAKE_CMD make)
-
-	# for the statically- linked external dependencies, we need to hint where
-	# we need the gmake rather than make system
-	if (${CMAKE_SYSTEM_NAME} MATCHES "BSD|DragonFly")
-		set(BSD_BUILD TRUE)
-		set(EXTMAKE_CMD gmake)
-	endif()
 
 	set(LUA_LINKTYPE "dynamic")
 
@@ -466,7 +504,6 @@ else()
 		INCLUDE_DIRS
 		${LUA_INCLUDE_DIR}
 		${LUA_INCLUDE_DIRS}
-		${OPENAL_INCLUDE_DIR}
 		${FREETYPE_DEFAULT_INCLUDE_DIRS}
 		${SQLite3_INCLUDE_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/platform
@@ -484,7 +521,6 @@ else()
 		engine/arcan_renderfun.c
 		engine/arcan_3dbase.c
 		engine/arcan_math.c
-		engine/arcan_audio.c
 		engine/arcan_ttf.c
 		engine/arcan_img.c
 		engine/arcan_led.c
@@ -577,6 +613,7 @@ if (CLIENT_LIBRARY_BUILD OR BUILD_PRESET STREQUAL "client")
 else()
 	amsg("\n${CL_WHT}---- Configuration results:${CL_RST}")
 	amsg("${CL_YEL}compiler\t${CL_GRN}${CMAKE_C_COMPILER_ID}${CL_RST}")
+	amsg("${CL_YEL}audio   \t${CL_GRN}${AUDIO_PLATFORM}${CL_RST}")
 	amsg("${CL_YEL}video   \t${CL_GRN}${VIDEO_PLATFORM}${CL_RST}")
 	if (HYBRID_SDL)
 		amsg("\t        \t${CL_GRN}+support sdl platform${CL_RST}")
@@ -668,7 +705,7 @@ else()
 		${ARCAN_LIBRARIES}
 		${VIDEO_LIBRARIES}
 		${AGP_LIBRARIES}
-		${OPENAL_LIBRARY}
+		${AUDIO_LIBRARY}
 		arcan_shmif_int
 	)
 
@@ -730,7 +767,7 @@ else()
 			FRAMESERVER_MODESTRING=\"${FRAMESERVER_MODESTRING}\"
 		)
 		target_link_libraries(arcan_sdl
-			${STDLIB} ${ARCAN_LIBRARIES} ${VIDEO_LIBRARIES} ${OPENAL_LIBRARY}
+			${STDLIB} ${ARCAN_LIBRARIES} ${VIDEO_LIBRARIES} ${AUDIO_LIBRARY}
 			${AGP_LIBRARIES} arcan_shmif_int
 		)
 		list(APPEND BIN_INSTALL arcan_sdl)
@@ -771,7 +808,7 @@ else()
 			FRAMESERVER_MODESTRING=\"${FRAMESERVER_MODESTRING}\"
 		)
 		target_link_libraries(arcan_headless
-			${STDLIB} ${ARCAN_LIBRARIES} ${VIDEO_LIBRARIES} ${OPENAL_LIBRARY}
+			${STDLIB} ${ARCAN_LIBRARIES} ${VIDEO_LIBRARIES} ${AUDIO_LIBRARY}
 			${AGP_LIBRARIES} arcan_shmif_int
 		)
 		list(APPEND BIN_INSTALL arcan_headless)

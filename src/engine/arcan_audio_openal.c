@@ -97,7 +97,7 @@ static ALuint load_wave(const char* fname){
 	bool le = (*(char*)&kv) == 0x34;
 	if (!le && (arcan_warning(
 		"load_wave(BE) -- big endian swap unimplemented\n"), true))
-	goto cleanup;
+		goto cleanup;
 
 /* a. map resource / file as per usual */
 /* b. read header; (RIFX BE, RIFF LE)
@@ -223,7 +223,7 @@ static arcan_aobj_id arcan_audio_alloc(arcan_aobj** dst, bool defer)
 	arcan_aobj* newcell = arcan_alloc_mem(sizeof(arcan_aobj), ARCAN_MEM_ATAG,
 		ARCAN_MEM_BZERO, ARCAN_MEMALIGN_NATURAL);
 
-	newcell->alid = alid;
+	newcell->handle = alid;
 	newcell->gain = current_acontext->def_gain;
 
 /* unlikely event of wrap-around */
@@ -294,9 +294,9 @@ static arcan_errc audio_free(arcan_aobj_id id)
 	if (current){
 		*owner = current->next;
 
-		if (current->alid != AL_NONE){
-			alSourceStop(current->alid);
-			alDeleteSources(1, &current->alid);
+		if (current->handle != AL_NONE){
+			alSourceStop(current->handle);
+			alDeleteSources(1, &current->handle);
 
 			if (current->n_streambuf)
 				alDeleteBuffers(current->n_streambuf, current->streambuf);
@@ -404,17 +404,19 @@ arcan_errc arcan_audio_play(
 				alSourcef(alid, AL_GAIN, gain_override ? gain : aobj->gain);
 				_wrap_alError(aobj,"load_sample(alSource)");
 
-				alSourceQueueBuffers(alid, 1, &aobj->streambuf[0]);
+				alSourceQueueBuffers(alid, aobj->n_streambuf, &aobj->streambuf[0]);
 				_wrap_alError(aobj, "load_sample(alQueue)");
 				alSourcePlay(alid);
 				break;
 			}
 	}
 /* some kind of streaming source, can't play if it is already active */
-	else if (aobj->active == false && aobj->alid != AL_NONE){
-		alSourcePlay(aobj->alid);
+	else if (aobj->active == false && aobj->handle != AL_NONE){
+		alSourcePlay(aobj->handle);
 		_wrap_alError(aobj, "play(alSourcePlay)");
 		aobj->active = true;
+	} else {
+		return ARCAN_ERRC_BAD_ARGUMENT;
 	}
 
 	return ARCAN_OK;
@@ -530,7 +532,7 @@ arcan_aobj_id arcan_audio_feed(arcan_afunc_cb feed, void* tag, arcan_errc* errc)
 
 /* the id will be allocated when we first get data as there
  * is a limit to how many streaming / mixed sources we can support */
-	aobj->alid = AL_NONE;
+	aobj->handle = AL_NONE;
 	aobj->streaming = true;
 	aobj->tag = tag;
 	aobj->n_streambuf = ARCAN_ASTREAMBUF_LIMIT;
@@ -547,16 +549,16 @@ arcan_errc arcan_audio_rebuild(arcan_aobj_id id)
 {
 	arcan_aobj* aobj = arcan_audio_getobj(id);
 	arcan_errc rv = ARCAN_ERRC_NO_SUCH_OBJECT;
-	if (!aobj || aobj->alid == AL_NONE)
+	if (!aobj || aobj->handle == AL_NONE)
 		return ARCAN_ERRC_NO_SUCH_OBJECT;
 
-	alSourceStop(aobj->alid);
+	alSourceStop(aobj->handle);
 	_wrap_alError(NULL, "audio_rebuild(stop)");
 
 	int n;
-	while(alGetSourcei(aobj->alid, AL_BUFFERS_PROCESSED, &n), n > 0){
+	while(alGetSourcei(aobj->handle, AL_BUFFERS_PROCESSED, &n), n > 0){
 		unsigned buffer = 0;
-		alSourceUnqueueBuffers(aobj->alid, 1, &buffer);
+		alSourceUnqueueBuffers(aobj->handle, 1, &buffer);
 		int bufferind = find_bufferind(aobj, buffer);
 		if (bufferind >= 0){
 			aobj->streambufmask[bufferind] = false;
@@ -564,9 +566,9 @@ arcan_errc arcan_audio_rebuild(arcan_aobj_id id)
 		}
 	}
 
-	alDeleteSources(1, &aobj->alid);
-	alGenSources(1, &aobj->alid);
-	alSourcef(aobj->alid, AL_GAIN, aobj->gain);
+	alDeleteSources(1, &aobj->handle);
+	alGenSources(1, &aobj->handle);
+	alSourcef(aobj->handle, AL_GAIN, aobj->gain);
 
 	_wrap_alError(NULL, "audio_rebuild(recreate)");
 
@@ -586,7 +588,7 @@ arcan_errc arcan_audio_suspend()
 	arcan_aobj* current = current_acontext->first;
 
 	while (current) {
-		if (current->id != AL_NONE)
+		if (current->id != ARCAN_EID)
 			arcan_audio_pause(current->id);
 
 		current = current->next;
@@ -621,14 +623,14 @@ arcan_errc arcan_audio_pause(arcan_aobj_id id)
 	arcan_aobj* dobj = arcan_audio_getobj(id);
 	arcan_errc rv = ARCAN_ERRC_NO_SUCH_OBJECT;
 
-	if (dobj && dobj->alid != AL_NONE) {
+	if (dobj && dobj->handle != AL_NONE) {
 /*
  * int processed;
- * alGetSourcei(dobj->alid, AL_BUFFERS_PROCESSED, &processed);
- * alSourceUnqueueBuffers(dobj->alid, 1, (unsigned int*) &processed);
+ * alGetSourcei(dobj->handle, AL_BUFFERS_PROCESSED, &processed);
+ * alSourceUnqueueBuffers(dobj->handle, 1, (unsigned int*) &processed);
  * dobj->used -= processed;
  */
-		alSourceStop(dobj->alid);
+		alSourceStop(dobj->handle);
 		_wrap_alError(dobj, "audio_pause(get/unqueue/stop)");
 		dobj->active = false;
 		rv = ARCAN_OK;
@@ -710,8 +712,8 @@ arcan_errc arcan_audio_setgain(arcan_aobj_id id, float gain, uint16_t time)
 
 		if (dobj->gproxy)
 			dobj->gproxy(dobj->gain, dobj->tag);
-		else if (dobj->alid){
-			alSourcef(dobj->alid, AL_GAIN, gain);
+		else if (dobj->handle){
+			alSourcef(dobj->handle, AL_GAIN, gain);
 			_wrap_alError(dobj, "audio_setgain(getSource/source)");
 		}
 		else
@@ -780,15 +782,15 @@ void arcan_audio_buffer(arcan_aobj* aobj, ssize_t buffer, void* audbuf,
  * keeping track of which sources that are actively in use and freeing
  * up those that havn't seen any use for a while.
  */
-	if (aobj->alid == AL_NONE){
-		alGenSources(1, &aobj->alid);
+	if (aobj->handle == AL_NONE){
+		alGenSources(1, &aobj->handle);
 		alGenBuffers(aobj->n_streambuf, aobj->streambuf);
-		alSourcef(aobj->alid, AL_GAIN, aobj->gain);
+		alSourcef(aobj->handle, AL_GAIN, aobj->gain);
 
-		alSourceQueueBuffers(aobj->alid, 1, &aobj->streambuf[0]);
+		alSourceQueueBuffers(aobj->handle, 1, &aobj->streambuf[0]);
 		aobj->streambufmask[0] = true;
 		aobj->used++;
-		alSourcePlay(aobj->alid);
+		alSourcePlay(aobj->handle);
 
 	_wrap_alError(NULL, "audio_feed(genBuffers)");
 	}
@@ -814,20 +816,20 @@ static void astream_refill(arcan_aobj* current)
 	ALenum state = 0;
 	ALint processed = 0;
 
-	if (current->alid == AL_NONE && current->feed){
-		current->feed(current, current->alid, 0, false, current->tag);
+	if (current->handle == AL_NONE && current->feed){
+		current->feed(current, 0, false, current->tag);
 		return;
 	}
 
 /* stopped or not, the process is the same,
  * dequeue and requeue as many buffers as possible */
-	alGetSourcei(current->alid, AL_SOURCE_STATE, &state);
-	alGetSourcei(current->alid, AL_BUFFERS_PROCESSED, &processed);
+	alGetSourcei(current->handle, AL_SOURCE_STATE, &state);
+	alGetSourcei(current->handle, AL_BUFFERS_PROCESSED, &processed);
 /* make sure to replace each one that finished with the next one */
 
 	for (size_t i = 0; i < processed; i++){
 		unsigned buffer = 1;
-		alSourceUnqueueBuffers(current->alid, 1, &buffer);
+		alSourceUnqueueBuffers(current->handle, 1, &buffer);
 		ssize_t bufferind = find_bufferind(current, buffer);
 		if (-1 == bufferind){
 			arcan_warning("(audio) unqueue returned unknown buffer, "
@@ -844,12 +846,12 @@ static void astream_refill(arcan_aobj* current)
  * for streaming source etc. try with a callback.
  * Some frameserver modes will do this as a push rather than pull however. */
 		if (current->feed){
-			arcan_errc rv = current->feed(current, current->alid,
+			arcan_errc rv = current->feed(current,
 				buffer, i < processed - 1, current->tag);
 			_wrap_alError(current, "audio_refill(refill:buffer)");
 
 			if (rv == ARCAN_OK){
-				alSourceQueueBuffers(current->alid, 1, &buffer);
+				alSourceQueueBuffers(current->handle, 1, &buffer);
 				current->streambufmask[bufferind] = true;
 				_wrap_alError(current, "audio_refill(refill:queue)");
 				current->used++;
@@ -874,13 +876,13 @@ static void astream_refill(arcan_aobj* current)
 			if (-1 == ind)
 				break;
 
-			arcan_errc rv = current->feed(current, current->alid,
+			arcan_errc rv = current->feed(current,
 				current->streambuf[ind], find_freebufferind(
 				current, false) != -1, current->tag
 			);
 
 			if (rv == ARCAN_OK){
-				alSourceQueueBuffers(current->alid, 1, &current->streambuf[ind]);
+				alSourceQueueBuffers(current->handle, 1, &current->streambuf[ind]);
 				current->streambufmask[ind] = true;
 				current->used++;
 			}
@@ -893,7 +895,7 @@ static void astream_refill(arcan_aobj* current)
 
 playback:
 	if (current->used && state != AL_PLAYING){
-		alSourcePlay(current->alid);
+		alSourcePlay(current->handle);
 		_wrap_alError(current, "audio_restart(astream_refill)");
 	}
 	return;
@@ -1110,8 +1112,8 @@ void arcan_audio_tick(uint8_t ntt)
 			if (step_transform(current)){
 				if (current->gproxy)
 					current->gproxy(current->gain, current->tag);
-				else if (current->alid){
-					alSourcef(current->alid, AL_GAIN, current->gain);
+				else if (current->handle){
+					alSourcef(current->handle, AL_GAIN, current->gain);
 					_wrap_alError(current, "audio_tick(source/gain)");
 				}
 			}
@@ -1166,13 +1168,13 @@ void arcan_audio_purge(arcan_aobj_id* ids, size_t nids)
 		if (!match){
 			(*previous) = next;
 			if (current->feed)
-				current->feed(current, current->id, -1, false, current->tag);
+				current->feed(current, -1, false, current->tag);
 
 			_wrap_alError(current, "audio_stop(stop)");
 
-			if (current->alid != AL_NONE){
-				alSourceStop(current->alid);
-				alDeleteSources(1, &current->alid);
+			if (current->handle != AL_NONE){
+				alSourceStop(current->handle);
+				alDeleteSources(1, &current->handle);
 
 				if (current->n_streambuf)
 					alDeleteBuffers(current->n_streambuf, current->streambuf);
@@ -1191,7 +1193,7 @@ void arcan_audio_purge(arcan_aobj_id* ids, size_t nids)
 static bool _wrap_alError(arcan_aobj* obj, char* prefix)
 {
 	ALenum errc = alGetError();
-	arcan_aobj empty = {.id = 0, .alid = 0};
+	arcan_aobj empty = {.id = 0, .handle = 0};
 	if (!obj)
 		obj = &empty;
 
@@ -1205,27 +1207,27 @@ static bool _wrap_alError(arcan_aobj* obj, char* prefix)
 		switch (errc) {
 		case AL_INVALID_NAME:
 			arcan_warning("(%u:%u), %s - bad ID passed to function\n",
-				obj->id, obj->alid, prefix);
+				obj->id, obj->handle, prefix);
 			break;
 		case AL_INVALID_ENUM:
 			arcan_warning("(%u:%u), %s - bad enum value passed to function\n",
-				obj->id, obj->alid, prefix);
+				obj->id, obj->handle, prefix);
 			break;
 		case AL_INVALID_VALUE:
 			arcan_warning("(%u:%u), %s - bad value passed to function\n",
-				obj->id, obj->alid, prefix);
+				obj->id, obj->handle, prefix);
 			break;
 		case AL_INVALID_OPERATION:
 			arcan_warning("(%u:%u), %s - requested operation is not valid\n",
-				obj->id, obj->alid, prefix);
+				obj->id, obj->handle, prefix);
 			break;
 		case AL_OUT_OF_MEMORY:
 			arcan_warning("(%u:%u), %s - OpenAL out of memory\n", obj->id,
-				obj->alid, prefix);
+				obj->handle, prefix);
 			break;
 		default:
 			arcan_warning("(%u:%u), %s - undefined error\n", obj->id,
-				obj->alid, prefix);
+				obj->handle, prefix);
 		}
 		return false;
 	}

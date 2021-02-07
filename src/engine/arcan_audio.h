@@ -33,7 +33,7 @@ struct arcan_aobj;
  * data to feed. Any other error leads to cleanup / destruction.
  */
 typedef arcan_errc(*arcan_afunc_cb)(struct arcan_aobj* aobj,
-	arcan_aobj_id id, ssize_t buffer, bool cont, void* tag);
+	ssize_t buffer, bool cont, void* tag);
 
 /*
  * There is one global hook that can be used to get access to audio
@@ -45,7 +45,7 @@ typedef void(*arcan_monafunc_cb)(arcan_aobj_id id, uint8_t* buf,
 
 /*
  * It is possible that the frameserver is a process parasite in another
- * process where we would like to interface audio control anyhow throuh
+ * process where we would like to interface audio control anyhow through
  * a gain proxy. This callback is used for those purposes.
  */
 typedef arcan_errc(*arcan_again_cb)(float gain, void* tag);

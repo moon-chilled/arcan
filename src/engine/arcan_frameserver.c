@@ -572,8 +572,7 @@ enum arcan_ffunc_rv arcan_frameserver_verifyffunc FFUNC_HEAD
  * first refresh' and try it. */
 		arcan_video_alterfeed(tgt->vid, FFUNC_NULLFRAME, state);
 		arcan_errc errc;
-		tgt->aid = arcan_audio_feed((arcan_afunc_cb)
-			arcan_frameserver_audioframe_direct, tgt, &errc);
+		tgt->aid = arcan_audio_feed(arcan_frameserver_audioframe_direct, tgt, &errc);
 		tgt->sz_audb = 0;
 		tgt->ofs_audb = 0;
 		tgt->audb = NULL;
@@ -1280,9 +1279,7 @@ bool arcan_frameserver_setramps(arcan_frameserver* src,
  * buffering works. Hence we ignore queing to the selected buffer, and instead
  * use a populate function to retrieve at most n' buffers that we then fill.
  */
-arcan_errc arcan_frameserver_audioframe_direct(arcan_aobj* aobj,
-	arcan_aobj_id id, unsigned buffer, bool cont, void* tag)
-{
+arcan_errc arcan_frameserver_audioframe_direct(arcan_aobj* aobj, ssize_t buffer, bool cont, void* tag) {
 	arcan_frameserver* src = (arcan_frameserver*) tag;
 
 	if (buffer == -1 || src->segid == SEGID_UNKNOWN)

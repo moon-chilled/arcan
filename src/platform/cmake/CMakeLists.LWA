@@ -19,50 +19,45 @@
 # of the licensing pollution and overhead.
 #
 
-ExternalProject_Add(openal_lwa
-	SOURCE_DIR ${EXTERNAL_SRC_DIR}/git/openal
-	BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal_lwa_static
-	DOWNLOAD_COMMAND
-	${EXTERNAL_DEFS}
-	${CMAKE_EXTERNAL_DEFS}
-		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-		-DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/lwa
-    -DALSOFT_BACKEND_DSOUND=OFF
-    -DALSOFT_BACKEND_MMDEVAPI=OFF
-    -DALSOFT_BACKEND_JACK=OFF
-    -DALSOFT_BACKEND_COREAUDIO=OFF
-    -DALSOFT_BACKEND_OPENSL=OFF
-		-DALSOFT_BACKEND_ALSA=OFF
-		-DALSOFT_BACKEND_OSS=OFF
-		-DALSOFT_BACKEND_PULSEAUDIO=OFF
-		-DALSOFT_BACKEND_PORTAUDIO=OFF
-		-DALSOFT_BACKEND_SOLARIS=OFF
-		-DALSOFT_BACKEND_SNDIO=OFF
-		-DALSOFT_BACKEND_QSA=OFF
-		-DALSOFT_BACKEND_WAVE=OFF
-		-DALSOFT_BACKEND_WINMM=OFF
-		-DALSOFT_MIDI_FLUIDSYNTH=OFF
-		-DALSOFT_BACKEND_ARCAN=ON
-		-DALSOFT_REQUIRE_ARCAN=ON
-		-DALSOFT_EXAMPLES=OFF
-		-DALSOFT_DLOPEN=OFF
-		-DALSOFT_UTILS=OFF
-		-DALSOFT_CONFIG=OFF
-		-DALSOFT_TESTS=OFF
-		-DARCAN_SHMIF_LIB=$<TARGET_FILE:arcan_shmif_int>
-		-DARCAN_SHMIF_PATH=${CMAKE_CURRENT_SOURCE_DIR}/shmif
-		-DARCAN_SHMIF_PLATFORM_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/platform/platform.h
-)
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+	set(GORILLA_BUILDTYPE debug)
+else()
+	set(GORILLA_BUILDTYPE release)
+endif()
 
-ExternalProject_Get_Property(openal_lwa SOURCE_DIR)
-ExternalProject_Get_Property(openal_lwa BINARY_DIR)
+ExternalProject_Add(Gorillarcan
+	SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/gac
+	GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/gorilla-audio"
+	CONFIGURE_COMMAND ""
+	UPDATE_COMMAND ""
+	INSTALL_COMMAND ""
+	BUILD_IN_SOURCE 1
+	BUILD_COMMAND "${EXTMAKE_CMD}"
+	MODE=${GORILLA_BUILDTYPE}
+	CC=${CMAKE_C_COMPILER}
+	-C
+	${CMAKE_CURRENT_BINARY_DIR}/gac
+	ENABLE_ARCAN=1
+
+	ENABLE_XAUDIO2=0
+	ENABLE_PULSEAUDIO=0
+	ENABLE_ALSA=0
+	ENABLE_OSS=0
+	ENABLE_OPENAL=0
+
+	ARCAN_LWA_BUILD=1
+	ARCAN_LWA_CFLAGS=-I${ARCAN_SHMIF_INCLUDE_DIR}
+	BUILD_DYNAMIC=0
+
+	${EXTERNAL_DEFS})
+
 
 set(LWA_LIBRARIES
-	${LWA_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/openal_lwa_static/libopenal.a
+	${LWA_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/gac/o/${GORILLA_BUILDTYPE}/libgorilla.a
 )
 
 set(LWA_INCLUDES
-	${CMAKE_CURRENT_BINARY_DIR}/lwa/include/AL
+	${CMAKE_CURRENT_BINARY_DIR}/gac/include
 	${INCLUDE_DIRS}
 )
 
@@ -80,8 +75,8 @@ if (${VIDEO_PLATFORM} MATCHES "egl-dri")
 		APPEND PROPERTY COMPILE_DEFINITIONS EGL_DMA_BUF)
 endif()
 
-add_dependencies(openal_lwa arcan_shmif_int)
-add_dependencies(arcan_lwa arcan_shmif_int arcan_shmif_intext openal_lwa ${MAIN_DEPS})
+add_dependencies(Gorillarcan arcan_shmif_int)
+add_dependencies(arcan_lwa arcan_shmif_int arcan_shmif_intext Gorillarcan ${MAIN_DEPS})
 if(STATIC_FREETYPE)
 	add_dependencies(arcan_lwa Freetype)
 endif()
@@ -90,8 +85,6 @@ target_compile_definitions(arcan_lwa PRIVATE
 	ARCAN_LWA
 	${ARCAN_DEFINITIONS}
 )
-
-add_dependencies(arcan_lwa openal_lwa)
 
 target_include_directories(arcan_lwa PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(arcan_lwa
