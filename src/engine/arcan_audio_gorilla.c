@@ -373,12 +373,6 @@ arcan_aobj_id arcan_audio_feed(arcan_afunc_cb feed, void* tag, arcan_errc* errc)
 	return rid;
 }
 
-/* Stub needed only for OpenAL */
-arcan_errc arcan_audio_rebuild(arcan_aobj_id id)
-{
-	return ARCAN_OK;
-}
-
 enum aobj_kind arcan_audio_kind(arcan_aobj_id id)
 {
 	arcan_aobj* aobj = arcan_audio_getobj(id);

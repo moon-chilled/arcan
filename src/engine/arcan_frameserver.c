@@ -1470,8 +1470,6 @@ arcan_errc arcan_frameserver_flush(arcan_frameserver* fsrv)
 	if (!fsrv)
 		return ARCAN_ERRC_NO_SUCH_OBJECT;
 
-	arcan_audio_rebuild(fsrv->aid);
-
 	return ARCAN_OK;
 }
 

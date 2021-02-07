@@ -79,14 +79,6 @@ size_t arcan_audio_refresh();
 arcan_errc arcan_audio_shutdown();
 
 /*
- * Some drivers / implementations have put us in a situation where
- * the audio subsystem has died, but some commands are still responsive.
- * Calling this function is a sortof a "last chance" rebuild of underlying
- * IDs and buffers for a single audio object.
- */
-arcan_errc arcan_audio_rebuild(arcan_aobj_id id);
-
-/*
  * Add a hook to the feed functions of a specific audio ID, primarily
  * used for implementing audio recording of multiple sources.
  */
