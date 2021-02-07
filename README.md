@@ -48,7 +48,7 @@ which is the one we will use here.
 
 Specific package names depend on your distribution, but common ones are:
 
-    sqlite3, openal-soft, sdl2, opengl, luajit, gbm, kms, freetype, harfbuzz
+    sqlite3, alsa-lib, libpulse, sdl2, opengl, luajit, gbm, kms, freetype, harfbuzz
     libxkbcommon
 
 For encoding and decoding options you would also want:
@@ -62,10 +62,6 @@ First we need some in-source dependencies that are cloned manually for now:
     cd external/git
     ../clone.sh
     cd ../arcan
-
-These are typically not needed, with the exception of our temporary openAL
-patches pending refactoring of that subsystem in time for the ~0.7 series of
-releases.
 
 ### Compiling
 

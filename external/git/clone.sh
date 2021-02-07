@@ -11,6 +11,5 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 git clone http://luajit.org/git/luajit-2.0.git "$DIR/luajit"
 git clone git://git.sv.nongnu.org/freetype/freetype2.git "$DIR/freetype"
-git clone https://github.com/letoram/openal.git "$DIR/openal"
-git clone https://github.com/libuvc/libuvc.git "$DIR/libuvc"
 git clone https://github.com/moon-chilled/gorilla-audio.git "$DIR/gorilla-audio"
+git clone https://github.com/libuvc/libuvc.git "$DIR/libuvc"

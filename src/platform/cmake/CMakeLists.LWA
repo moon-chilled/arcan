@@ -9,10 +9,6 @@
 # audio/video/input platform that uses arcan-shmif rather than the
 # regular platform configuration.
 #
-# To achieve this, we need special handling for audio, which is
-# currently done by making a separate openal build where we patch
-# in the code needed for this.
-#
 # When audio is refactored in the same platform/etc. structure as was
 # done with video and agp, we'll have a soft- version with just basic
 # resampling (already here) and basic mixing (already here) and get rid

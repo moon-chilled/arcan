@@ -22,13 +22,8 @@ struct arcan_achain {
 	struct arcan_achain* next;
 };
 
-#ifdef OPENAL
-typedef unsigned arcan_opaque_ahandle, arcan_opaque_astream;
-#elif defined(GORILLA)
 typedef struct GaHandle *arcan_opaque_ahandle; 
-// AOBJ_SAMPLE -> sound; should maybe be exposed
 typedef struct GaSampleSource *arcan_opaque_astream;
-#endif
 
 typedef struct arcan_aobj {
 /* shared */
@@ -47,10 +42,10 @@ typedef struct arcan_aobj {
 /* AOBJ_STREAM only */
 	bool streaming;
 
-/* AOBJ sample only */
+/* AOBJ sample only.  GaSound? */
 	uint16_t* samplebuf;
 
-/* openAL Buffering */
+/* Buffering */
 	unsigned char n_streambuf;
 	arcan_tickv last_used;
 

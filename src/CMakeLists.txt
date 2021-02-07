@@ -133,9 +133,7 @@ else()
 		endif()
 		include(GNUInstallDirs)
 	endif()
-	if (NOT AUDIO_PLATFORM)
-		set(AUDIO_PLATFORM "gorilla")
-	endif()
+	set(AUDIO_PLATFORM "gorilla")
 	set(AGPPLATFORM_STR "gl21, gles2, gles3, stub")
 
 	# we can remove some of this cruft when 'buntu LTS gets ~3.0ish
@@ -143,7 +141,6 @@ else()
 	option(NO_FSRV "Disable building/launching frameservers" OFF)
 	option(STATIC_SQLite3 "Use SQLite3 Amalgamation" OFF)
 	option(STATIC_FREETYPE "Use static Freetype (external/git folder)" OFF)
-	option(STATIC_OPENAL "Use static OpenAL (external/git folder)" OFF)
 	option(STATIC_LIBUVC "Use static libuvc (external/git folder)" ON)
 	option(ENABLE_LTO "Build with Link-Time Optimization enabled" OFF)
 	option(ENABLE_LWA "Build LWA client (arcan-in-arcan)" ON)
@@ -158,7 +155,6 @@ else()
 	amsg("${CL_YEL}\t-DBUILD_PRESET=${CL_GRN}everything client${CL_RST}")
 	amsg("")
 	amsg("${CL_WHT}Audio/Video/Input Support:")
-	amsg("${CL_YEL}\t-DAUDIO_PLATFORM=${CL_GRN}[gorilla|al]${CL_RST}")
 	amsg("${CL_YEL}\t-DVIDEO_PLATFORM=${CL_GRN}${VPLATFORM_STR}${CL_RST}")
 	amsg("${CL_YEL}\t-DAGP_PLATFORM=${CL_GRN}${AGPPLATFORM_STR}${CL_RST}")
 	amsg("")
@@ -177,7 +173,6 @@ else()
 	amsg("")
 	amsg("${CL_WHT}Dependency Management:${CL_RST}")
 	amsg("${CL_YEL}\t-DSTATIC_SQLite3=${CL_GRN}[Off|On]${CL_RST} - In-source SQLite3")
-	amsg("${CL_YEL}\t-DSTATIC_OPENAL=${CL_GRN}[Off|On]${CL_RST} - In-source OpenAL, see external/README")
 	amsg("${CL_YEL}\t-DSTATIC_FREETYPE=${CL_GRN}[Off|On]${CL_RST} - In-source Freetype")
 	amsg("${CL_YEL}\t-DSTATIC_LIBUVC=${CL_GRN}[Off|On]${CL_RST} - In-source libuvc")
 	amsg("")
@@ -367,71 +362,40 @@ else()
 		set(EXTMAKE_CMD gmake)
 	endif()
 
-	# need the separation here to not confuse openAL here with
-	# the version that we patch into LWA
-	if (AUDIO_PLATFORM STREQUAL "al" OR NOT EXISTS ${EXTERNAL_SRC_DIR}/git/gorilla-audio)
-		if (EXISTS ${EXTERNAL_SRC_DIR}/git/openal AND STATIC_OPENAL)
-			amsg("${CL_YEL}Building OpenAL static from external/git mirror${CL_RST}")
-			ExternalProject_Add(OpenAL
-				SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal
-				BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/openal_static
-				UPDATE_COMMAND ""
-				GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/openal"
-				${EXTERNAL_DEFS}
-				${CMAKE_EXTERNAL_DEFS}
-				-DALSOFT_BACKEND_DSOUND=OFF
-				-DALSOFT_BACKEND_MMDEVAPI=OFF
-				-DALSOFT_BACKEND_OPENSL=OFF
-				-DALSOFT_BACKEND_PORTAUDIO=OFF
-				-DALSOFT_BACKEND_SOLARIS=OFF
-				-DALSOFT_BACKEND_SNDIO=OFF
-				-DALSOFT_BACKEND_QSA=OFF
-				-DALSOFT_BACKEND_WAVE=OFF
-				-DALSOFT_BACKEND_WINMM=OFF
-			)
-			set(AUDIO_LIBRARY
-				"${CMAKE_CURRENT_BINARY_DIR}/openal_static/libopenal.a"
-			)
-			list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/include/AL")
-			list(APPEND MAIN_DEPS OpenAL)
-		else()
-			find_package(OpenAL REQUIRED QUIET)
-			set(AUDIO_LIBRARY "${OPENAL_LIBRARY}")
-		endif()
-		list(APPEND SOURCES engine/arcan_audio_openal.c)
-		add_definitions(-DOPENAL)
-	else() #gorilla
-		amsg("${CL_YEL}Building gorilla audio from external/git mirror${CL_RST}")
-
-		if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-			set(GORILLA_BUILDTYPE debug)
-		else()
-			set(GORILLA_BUILDTYPE release)
-		endif()
-
-		ExternalProject_Add(Gorilla
-			SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/ga
-			GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/gorilla-audio"
-			CONFIGURE_COMMAND ""
-			UPDATE_COMMAND ""
-			INSTALL_COMMAND ""
-			BUILD_IN_SOURCE 1
-			BUILD_COMMAND "${EXTMAKE_CMD}"
-			MODE=${GORILLA_BUILDTYPE}
-			CC=${CMAKE_C_COMPILER}
-			-C
-			${CMAKE_CURRENT_BINARY_DIR}/ga
-			BUILD_DYNAMIC=0
-			${EXTERNAL_DEFS})
-		set(AUDIO_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/ga/o/${GORILLA_BUILDTYPE}/libgorilla.a")
-		if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-			list(APPEND AUDIO_LIBRARY "asound")
-		endif()
-		list(APPEND MAIN_DEPS Gorilla)
-		list(APPEND SOURCES engine/arcan_audio_gorilla.c)
-		list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/ga/include")
-		add_definitions(-DGORILLA)
+	if (NOT EXISTS ${EXTERNAL_SRC_DIR}/git/gorilla-audio)
+		message(FATAL_ERROR "gorilla audio not present; please run external/git/clone.sh")
 	endif()
+
+	amsg("${CL_YEL}Building gorilla audio from external/git${CL_RST}")
+
+	if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+		set(GORILLA_BUILDTYPE debug)
+	else()
+		set(GORILLA_BUILDTYPE release)
+	endif()
+
+	ExternalProject_Add(Gorilla
+		SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/ga
+		GIT_REPOSITORY "${EXTERNAL_SRC_DIR}/git/gorilla-audio"
+		CONFIGURE_COMMAND ""
+		UPDATE_COMMAND ""
+		INSTALL_COMMAND ""
+		BUILD_IN_SOURCE 1
+		BUILD_COMMAND "${EXTMAKE_CMD}"
+		MODE=${GORILLA_BUILDTYPE}
+		CC=${CMAKE_C_COMPILER}
+		-C
+		${CMAKE_CURRENT_BINARY_DIR}/ga
+		BUILD_DYNAMIC=0
+		${EXTERNAL_DEFS})
+	set(AUDIO_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/ga/o/${GORILLA_BUILDTYPE}/libgorilla.a")
+	if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+		list(APPEND AUDIO_LIBRARY "asound")
+	endif()
+	list(APPEND MAIN_DEPS Gorilla)
+	list(APPEND SOURCES engine/arcan_audio_gorilla.c)
+	list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/ga/include")
+	add_definitions(-DGORILLA)
 
 	#
 	# the amalgamation is already included in the external/ tree sqlite3 use is
@@ -665,15 +629,11 @@ else()
 		${FSRV_DISABLE}
 	)
 
-	if (EXISTS ${EXTERNAL_SRC_DIR}/git/openal)
-		if(ENABLE_LWA AND LWA_PLATFORM_STR)
-			amsg("\n${CL_WHT}-- Stage 3, LWA Build${CL_RST}")
-			include(platform/cmake/CMakeLists.LWA)
-		else()
-			amsg("\n${CL_WHT}-- Stage 3, LWA Build (omitted)${CL_RST}")
-		endif()
+	if(ENABLE_LWA AND LWA_PLATFORM_STR)
+		amsg("\n${CL_WHT}-- Stage 3, LWA Build${CL_RST}")
+		include(platform/cmake/CMakeLists.LWA)
 	else()
-		amsg("\n${CL_WHT}-- Stage 3, LWA Build (omitted, see external/README)${CL_RST}")
+		amsg("\n${CL_WHT}-- Stage 3, LWA Build (omitted)${CL_RST}")
 	endif()
 
 	amsg("\n${CL_WHT}-- Stage 4, Linking / Packaging (=>${CMAKE_INSTALL_PREFIX})${CL_RST}")
