@@ -34,8 +34,6 @@ struct arcan_acontext {
  * hw dependant, ranging between 10-100 or so */
 	arcan_aobj *first;
 	GauManager *manager;
-	GaMixer *mixer;
-	GaStreamManager *stream_mgr;
 
 	bool ga_active;
 
@@ -165,8 +163,6 @@ arcan_errc arcan_audio_setup(bool nosound)
 
 	current_acontext->manager = gau_manager_create_custom(&(GaDeviceType){nosound ? GaDeviceType_Dummy : GaDeviceType_Default}, GauThreadPolicy_Multi, &(uint32_t){4}, &(uint32_t){512});
 	if (!current_acontext->manager) return ARCAN_ERRC_NOAUDIO;
-	current_acontext->mixer = gau_manager_mixer(current_acontext->manager);
-	current_acontext->stream_mgr = gau_manager_stream_manager(current_acontext->manager);
 
 	current_acontext->ga_active = true;
 
@@ -186,8 +182,6 @@ arcan_errc arcan_audio_shutdown()
 	current_acontext->ga_active = false;
 	gau_manager_destroy(current_acontext->manager);
 	current_acontext->manager = NULL;
-	current_acontext->mixer = NULL;
-	current_acontext->stream_mgr = NULL;
 	memset(current_acontext->sample_sources,
 		0, sizeof(current_acontext->sample_sources));
 
@@ -223,7 +217,7 @@ arcan_errc arcan_audio_play(arcan_aobj_id id, bool gain_override, float gain, in
 		for (size_t i = 0; i < ARCAN_AUDIO_SLIMIT; i++)
 			if (current_acontext->sample_sources[i] == NULL) {
 				// only one stream per aobj atm
-				current_acontext->sample_sources[i] = ga_handle_create(current_acontext->mixer, gau_sample_source_create_sound(aobj->streambuf[0].gs));
+				current_acontext->sample_sources[i] = ga_handle_create(mixer, gau_sample_source_create_sound(aobj->streambuf[0]));
 				current_acontext->sample_tags[i] = tag;
 				gacheck(ga_handle_set_paramf(current_acontext->sample_sources[i], GaHandleParam_Gain, gain_override ? gain : aobj->gain), aobj, "load_sample(set_paramf)");
 
@@ -234,7 +228,7 @@ arcan_errc arcan_audio_play(arcan_aobj_id id, bool gain_override, float gain, in
 	/* some kind of streaming source, can't play if it is already active */
 	} else if (aobj->active == false && aobj->handle == NULL) {
 		// only one stream per aobj atm
-		aobj->handle = gau_create_handle_buffered_samples(current_acontext->mixer, current_acontext->stream_mgr, aobj->streambuf[0], handle_done_cb, aobj, NULL);
+		aobj->handle = gau_create_handle_buffered_samples(current_acontext->manager, aobj->streambuf[0], handle_done_cb, aobj, NULL);
 		if (!aobj->handle) {
 			arcan_warning("(gorilla audio): could not create handle");
 			return ARCAN_ERRC_OUT_OF_SPACE; //?
@@ -308,7 +302,7 @@ arcan_aobj_id arcan_audio_load_sample(
 
 	// todo use arcan_open_resource and map data_source to GaDataSource
 	// todo add another function that does i/o buffering, as in:
-	//GaHandle *handle = gau_create_handle_buffered_file(current_acontext->mixer, current_acontext->stream_mgr, fname, GauAudioType_Wav, handle_done_cb, aobj, NULL);
+	//GaHandle *handle = gau_create_handle_buffered_file(current_acontext->manager, fname, GauAudioType_Wav, handle_done_cb, aobj, NULL);
 	GaSound *sound = gau_load_sound_file(fname, GauAudioType_Wav);
 	if (!sound) {
 		if (err) *err = ARCAN_ERRC_BAD_RESOURCE;
@@ -381,7 +375,7 @@ enum aobj_kind arcan_audio_kind(arcan_aobj_id id)
 
 arcan_errc arcan_audio_suspend()
 {
-	ga_mixer_suspend(current_acontext->mixer);
+	ga_mixer_suspend(gau_manager_mixer(current_acontext->manager));
 	current_acontext->ga_active = false;
 
 	return ARCAN_OK;
@@ -389,7 +383,7 @@ arcan_errc arcan_audio_suspend()
 
 arcan_errc arcan_audio_resume()
 {
-	ga_mixer_unsuspend(current_acontext->mixer);
+	ga_mixer_unsuspend(gau_manager_mixer(current_acontext->manager));
 	current_acontext->ga_active = true;
 
 	return ARCAN_OK;
