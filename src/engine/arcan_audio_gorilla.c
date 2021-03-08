@@ -247,13 +247,6 @@ arcan_errc arcan_audio_play(arcan_aobj_id id, bool gain_override, float gain, in
 	return ARCAN_OK;
 }
 
-static int16_t float_s16(float val) {
-	if (val < 0.0)
-		return -val * -32768.0;
-	else
-		return val * 32767.0;
-}
-
 arcan_aobj_id arcan_audio_sample_buffer(float* buffer,
 	size_t elems, int channels, int samplerate, const char* fmt_specifier) {
 	if (!buffer || !elems || channels <= 0 || channels > 2 || elems % channels != 0)
@@ -265,17 +258,22 @@ arcan_aobj_id arcan_audio_sample_buffer(float* buffer,
 	if (rid == ARCAN_EID)
 		return ARCAN_EID;
 
-	GaMemory *pcm = ga_memory_create(NULL, elems * sizeof(int16_t));
-	int16_t *samplebuf = ga_memory_data(pcm);
-
-	for (size_t i = 0; i < elems; i++){
-		samplebuf[i] = float_s16(buffer[i]);
+	GaMemory *pcm = ga_memory_create(NULL, elems * sizeof(float));
+	if (!pcm) {
+		return ARCAN_EID;
 	}
 
-	GaSound *sound = ga_sound_create(pcm, &(GaFormat){.sample_rate=samplerate, .bits_per_sample=16, .num_channels=channels});
+	memcpy(ga_memory_data(pcm), buffer, elems * sizeof(float));
+
+	GaSound *sound = ga_sound_create(pcm, &(GaFormat){.frame_rate=samplerate, .sample_fmt=GaSampleFormat_F32, .num_channels=channels});
 	ga_memory_release(pcm);
+
+	if (!sound) return ARCAN_EID;
+
 	GaSampleSource *ssrc = gau_sample_source_create_sound(sound);
 	ga_sound_release(sound);
+
+	if (!ssrc) return ARCAN_EID;
 
 	aobj->kind = AOBJ_SAMPLE;
 	aobj->gain = 1.0;
@@ -286,9 +284,7 @@ arcan_aobj_id arcan_audio_sample_buffer(float* buffer,
 	return rid;
 }
 
-arcan_aobj_id arcan_audio_load_sample(
-	const char* fname, float gain, arcan_errc* err)
-{
+arcan_aobj_id arcan_audio_load_sample(const char* fname, float gain, arcan_errc* err) {
 	if (fname == NULL)
 		return ARCAN_EID;
 
@@ -302,8 +298,8 @@ arcan_aobj_id arcan_audio_load_sample(
 
 	// todo use arcan_open_resource and map data_source to GaDataSource
 	// todo add another function that does i/o buffering, as in:
-	//GaHandle *handle = gau_create_handle_buffered_file(current_acontext->manager, fname, GauAudioType_Wav, handle_done_cb, aobj, NULL);
-	GaSound *sound = gau_load_sound_file(fname, GauAudioType_Wav);
+	//GaHandle *handle = gau_create_handle_buffered_file(current_acontext->manager, fname, GauAudioType_Autodetect, handle_done_cb, aobj, NULL);
+	GaSound *sound = gau_load_sound_file(fname, GauAudioType_Autodetect);
 	if (!sound) {
 		if (err) *err = ARCAN_ERRC_BAD_RESOURCE;
 		return ARCAN_EID;
